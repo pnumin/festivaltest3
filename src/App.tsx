@@ -1,14 +1,52 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { FestivalCard } from "./components/FestivalCard";
 import { FestivalDetail } from "./components/FestivalDetail";
 import type { FestivalItem, FestivalResponse } from "./types";
-import { Loader2, CalendarHeart } from "lucide-react";
+import { Loader2, CalendarHeart, Search, Calendar as CalendarIcon } from "lucide-react";
 
 export default function App() {
   const [festivals, setFestivals] = useState<FestivalItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedFestival, setSelectedFestival] = useState<FestivalItem | null>(null);
+
+  const [searchTerm, setSearchTerm] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+
+  const filteredFestivals = useMemo(() => {
+    return festivals.filter((festival) => {
+      const searchMatch =
+        festival.MAIN_TITLE.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (festival.SUBTITLE && festival.SUBTITLE.toLowerCase().includes(searchTerm.toLowerCase()));
+
+      let dateMatch = true;
+      if (startDate || endDate) {
+        const dateStr = festival.USAGE_DAY || festival.USAGE_DAY_WEEK_AND_TIME || "";
+        const datePattern = /(?:(\d{4})\s*[년.\/-]\s*)?(\d{1,2})\s*[월.\/-]\s*(\d{1,2})/g;
+        const matches = [...dateStr.matchAll(datePattern)];
+
+        if (matches.length > 0) {
+          const firstY = matches[0][1] ? parseInt(matches[0][1]) : new Date().getFullYear();
+          const festStart = new Date(firstY, parseInt(matches[0][2]) - 1, parseInt(matches[0][3]));
+
+          const lastMatch = matches[matches.length - 1];
+          const lastY = lastMatch[1] ? parseInt(lastMatch[1]) : firstY;
+          const festEnd = new Date(lastY, parseInt(lastMatch[2]) - 1, parseInt(lastMatch[3]));
+
+          const filterStart = startDate ? new Date(startDate) : new Date("1970-01-01");
+          const filterEnd = endDate ? new Date(endDate + "T23:59:59") : new Date("2099-12-31");
+
+          dateMatch = festStart <= filterEnd && festEnd >= filterStart;
+        } else {
+          // If we can't parse the date format at all, assume it doesn't match the strict filter
+          dateMatch = false;
+        }
+      }
+
+      return searchMatch && dateMatch;
+    });
+  }, [festivals, searchTerm, startDate, endDate]);
 
   useEffect(() => {
     async function fetchFestivals() {
@@ -55,6 +93,40 @@ export default function App() {
       </header>
 
       <main className="flex-1 flex flex-col max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex flex-col md:flex-row gap-4 mb-8 bg-[#0F0F0F] p-5 rounded-2xl border border-neutral-800 shadow-sm">
+          <div className="flex-1 relative">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500" />
+            <input 
+              type="text"
+              placeholder="Search festivals by name..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full bg-neutral-900 border border-neutral-800 rounded-xl pl-11 pr-4 py-3 text-sm text-neutral-200 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-neutral-600"
+            />
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="relative flex-1 md:w-40">
+              <CalendarIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500" />
+              <input 
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="w-full bg-neutral-900 border border-neutral-800 rounded-xl pl-11 pr-3 py-3 text-sm text-neutral-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all [color-scheme:dark]"
+              />
+            </div>
+            <span className="text-neutral-600 font-medium">~</span>
+            <div className="relative flex-1 md:w-40">
+              <CalendarIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500" />
+              <input 
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="w-full bg-neutral-900 border border-neutral-800 rounded-xl pl-11 pr-3 py-3 text-sm text-neutral-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all [color-scheme:dark]"
+              />
+            </div>
+          </div>
+        </div>
+
         {loading ? (
           <div className="flex flex-col items-center justify-center h-64 gap-4">
             <Loader2 className="w-10 h-10 text-blue-500 animate-spin" />
@@ -65,13 +137,13 @@ export default function App() {
             <p className="text-lg font-bold mb-2">Failed to load data</p>
             <p className="text-sm font-mono bg-neutral-900 border border-neutral-800 inline-block px-4 py-2 rounded-lg">{error}</p>
           </div>
-        ) : festivals.length === 0 ? (
+        ) : filteredFestivals.length === 0 ? (
           <div className="bg-[#0F0F0F] rounded-2xl p-16 text-center border border-neutral-800">
-            <p className="text-neutral-500 text-lg">No festival information available.</p>
+            <p className="text-neutral-500 text-lg">No festivals match your search criteria.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {festivals.map((festival) => (
+            {filteredFestivals.map((festival) => (
               <FestivalCard 
                 key={festival.UC_SEQ} 
                 festival={festival} 
